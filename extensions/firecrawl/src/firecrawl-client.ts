@@ -1,5 +1,7 @@
 // Firecrawl plugin module implements firecrawl client behavior.
+import { createRequire } from "node:module";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
+import { readPluginPackageVersion } from "openclaw/plugin-sdk/extension-shared";
 import {
   DEFAULT_CACHE_TTL_MINUTES,
   markdownToText,
@@ -41,6 +43,10 @@ const SCRAPE_CACHE = new Map<
 >();
 const DEFAULT_SEARCH_COUNT = 5;
 const DEFAULT_SCRAPE_MAX_CHARS = 50_000;
+
+const require = createRequire(import.meta.url);
+const PLUGIN_VERSION = readPluginPackageVersion({ require });
+const USER_AGENT = `openclaw-firecrawl/${PLUGIN_VERSION} (${process.platform})`;
 const ALLOWED_FIRECRAWL_HOSTS = new Set(["api.firecrawl.dev"]);
 const FIRECRAWL_SELF_HOSTED_PRIVATE_ERROR =
   "Firecrawl custom baseUrl must target a private or internal self-hosted endpoint.";
@@ -81,6 +87,7 @@ export type FirecrawlSearchParams = {
   sources?: string[];
   categories?: string[];
   scrapeResults?: boolean;
+  keyless?: boolean;
 };
 
 export type FirecrawlScrapeParams = {
@@ -93,6 +100,7 @@ export type FirecrawlScrapeParams = {
   proxy?: "auto" | "basic" | "stealth";
   storeInCache?: boolean;
   timeoutSeconds?: number;
+  keyless?: boolean;
 };
 
 export function assertFirecrawlScrapeTargetAllowed(url: string): void {
@@ -184,13 +192,13 @@ async function postFirecrawlJson<T>(
     url: string;
     mode?: FirecrawlEndpointMode;
     timeoutSeconds: number;
-    apiKey: string;
+    apiKey?: string;
     body: Record<string, unknown>;
     errorLabel: string;
   },
   parse: (response: Response) => Promise<T>,
 ): Promise<T> {
-  const apiKey = normalizeSecretInput(params.apiKey);
+  const apiKey = params.apiKey ? normalizeSecretInput(params.apiKey) : "";
   const mode = params.mode ?? (await validateFirecrawlBaseUrl(params.url));
   const withEndpoint =
     mode === "selfHosted" ? withSelfHostedWebToolsEndpoint : withStrictWebToolsEndpoint;
@@ -201,8 +209,9 @@ async function postFirecrawlJson<T>(
       init: {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           "Content-Type": "application/json",
+          "User-Agent": USER_AGENT,
         },
         body: JSON.stringify(params.body),
       },
@@ -327,7 +336,7 @@ function resolveSearchItems(payload: Record<string, unknown>): FirecrawlSearchIt
 
 function buildSearchPayload(params: {
   query: string;
-  provider: "firecrawl";
+  provider: "firecrawl" | "firecrawl-free";
   items: FirecrawlSearchItem[];
   tookMs: number;
   scrapeResults: boolean;
@@ -359,8 +368,10 @@ function buildSearchPayload(params: {
 export async function runFirecrawlSearch(
   params: FirecrawlSearchParams,
 ): Promise<Record<string, unknown>> {
-  const apiKey = resolveFirecrawlApiKey(params.cfg);
-  if (!apiKey) {
+  const keyless = params.keyless === true;
+  const provider = keyless ? "firecrawl-free" : "firecrawl";
+  const apiKey = keyless ? undefined : resolveFirecrawlApiKey(params.cfg);
+  if (!keyless && !apiKey) {
     throw new Error(
       "web_search (firecrawl) needs a Firecrawl API key. Set FIRECRAWL_API_KEY in the Gateway environment, or configure plugins.entries.firecrawl.config.webSearch.apiKey.",
     );
@@ -383,6 +394,7 @@ export async function runFirecrawlSearch(
       sources,
       categories,
       scrapeResults,
+      keyless,
     }),
   );
   const cached = readCache(SEARCH_CACHE, cacheKey);
@@ -433,7 +445,7 @@ export async function runFirecrawlSearch(
   );
   const result = buildSearchPayload({
     query: params.query,
-    provider: "firecrawl",
+    provider,
     items: resolveSearchItems(payload),
     tookMs: Date.now() - start,
     scrapeResults,
@@ -521,8 +533,9 @@ export async function runFirecrawlScrape(
 ): Promise<Record<string, unknown>> {
   assertFirecrawlScrapeTargetAllowed(params.url);
 
-  const apiKey = resolveFirecrawlApiKey(params.cfg);
-  if (!apiKey) {
+  const keyless = params.keyless === true;
+  const apiKey = keyless ? undefined : resolveFirecrawlApiKey(params.cfg);
+  if (!keyless && !apiKey) {
     throw new Error(
       "firecrawl_scrape needs a Firecrawl API key. Set FIRECRAWL_API_KEY in the Gateway environment, or configure plugins.entries.firecrawl.config.webFetch.apiKey.",
     );
@@ -548,6 +561,7 @@ export async function runFirecrawlScrape(
       proxy,
       storeInCache,
       maxChars,
+      keyless,
     }),
   );
   const cached = readCache(SCRAPE_CACHE, cacheKey);

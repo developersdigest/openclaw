@@ -67,3 +67,29 @@ export const FIRECRAWL_WEB_FETCH_PROVIDER_SHARED = {
     webFetch.apiKey = value;
   },
 } satisfies Omit<WebFetchProviderPlugin, "applySelectionConfig" | "createTool">;
+
+export const FIRECRAWL_FREE_WEB_FETCH_PROVIDER_SHARED = {
+  id: "firecrawl-free",
+  label: "Firecrawl (Free)",
+  hint: "Fetch pages with Firecrawl — no API key required",
+  requiresCredential: false,
+  envVars: [],
+  placeholder: "(no key needed)",
+  signupUrl: "https://www.firecrawl.dev/",
+  docsUrl: "https://docs.firecrawl.dev",
+  autoDetectOrder: 115,
+  credentialPath: "",
+  getCredentialValue: (fetchConfig) => {
+    if (!fetchConfig || typeof fetchConfig !== "object") {
+      return undefined;
+    }
+    const entry = fetchConfig["firecrawl-free"];
+    return entry && typeof entry === "object" && !Array.isArray(entry)
+      ? (entry as { apiKey?: unknown }).apiKey
+      : undefined;
+  },
+  setCredentialValue: (fetchConfigTarget, value) => {
+    const entry = ensureRecord(fetchConfigTarget, "firecrawl-free");
+    entry.apiKey = value;
+  },
+} satisfies Omit<WebFetchProviderPlugin, "applySelectionConfig" | "createTool">;

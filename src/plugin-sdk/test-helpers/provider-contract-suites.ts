@@ -154,7 +154,11 @@ export function installWebFetchProviderContractSuite(params: {
     const credentialValue = resolveLazy(params.credentialValue);
 
     expectWebProviderCredentialContract(provider, credentialValue);
-    expect(provider.credentialPath.trim()).not.toBe("");
+    // Keyless providers (requiresCredential: false) do not advertise a credential
+    // path; only keyed providers must point at where their secret is stored.
+    if (provider.requiresCredential !== false) {
+      expect(provider.credentialPath.trim()).not.toBe("");
+    }
     if (provider.inactiveSecretPaths) {
       expect(provider.inactiveSecretPaths).toEqual([...new Set(provider.inactiveSecretPaths)]);
       expect(provider.inactiveSecretPaths).toContain(provider.credentialPath);
