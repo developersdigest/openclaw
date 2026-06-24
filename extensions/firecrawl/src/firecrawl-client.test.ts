@@ -34,6 +34,30 @@ describe("firecrawl client helpers", () => {
     ]);
   });
 
+  it("collects web, news, and images results from a multi-source v2 payload", () => {
+    const items = __testing.resolveSearchItems({
+      data: {
+        web: [{ url: "https://example.com/web", title: "Web result" }],
+        news: [{ url: "https://example.com/news", title: "News result" }],
+        images: [{ url: "https://example.com/image", title: "Image result" }],
+      },
+    });
+    expect(items.map((item) => item.url)).toEqual([
+      "https://example.com/web",
+      "https://example.com/news",
+      "https://example.com/image",
+    ]);
+  });
+
+  it("parses a news-only v2 payload (regression: news source was dropped)", () => {
+    const items = __testing.resolveSearchItems({
+      data: {
+        news: [{ url: "https://example.com/news", title: "News result" }],
+      },
+    });
+    expect(items.map((item) => item.url)).toEqual(["https://example.com/news"]);
+  });
+
   it("parses scrape payloads, extracts text, and marks truncation", () => {
     const result = __testing.parseFirecrawlScrapePayload({
       payload: {

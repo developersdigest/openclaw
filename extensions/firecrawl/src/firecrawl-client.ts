@@ -87,16 +87,22 @@ function resolveSiteName(urlRaw: string): string | undefined {
 }
 
 function resolveSearchItems(payload: Record<string, unknown>): FirecrawlSearchItem[] {
+  const data = payload.data as Record<string, unknown> | undefined;
+  // v2/search returns results keyed by source: data.web / data.news / data.images.
+  // Collect every source array (not just the first match) so multi-source queries
+  // return all results; keep legacy/self-hosted array shapes working as fallbacks.
   const candidates = [
+    data?.web,
+    data?.news,
+    data?.images,
     payload.data,
     payload.results,
-    (payload.data as { results?: unknown } | undefined)?.results,
-    (payload.data as { data?: unknown } | undefined)?.data,
-    (payload.data as { web?: unknown } | undefined)?.web,
+    data?.results,
+    data?.data,
     (payload.web as { results?: unknown } | undefined)?.results,
   ];
-  const rawItems = candidates.find((candidate) => Array.isArray(candidate));
-  if (!Array.isArray(rawItems)) {
+  const rawItems = candidates.filter((candidate) => Array.isArray(candidate)).flat();
+  if (rawItems.length === 0) {
     return [];
   }
   const items: FirecrawlSearchItem[] = [];
